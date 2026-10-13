@@ -16,13 +16,25 @@ jest.mock('expo-secure-store', () => ({
   }),
 }));
 
+const mockExtra: { apiUrl?: string } = {};
+
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    // Read lazily: the module is loaded before this file's constants are initialised.
+    get expoConfig() {
+      return { version: '0.1.0', extra: mockExtra };
+    },
+  },
+}));
+
 const TOKEN_KEY = 'auth.refreshToken';
 const originalFetch = globalThis.fetch;
 let server: FakeServer;
 
 beforeEach(() => {
   mockStoredTokens.clear();
-  process.env.EXPO_PUBLIC_API_URL = 'https://api.example.test/graphql';
+  mockExtra.apiUrl = 'https://api.example.test/graphql';
   server = createFakeServer();
   server.reply('Translations', { data: { translations: [] } });
   globalThis.fetch = server.fetchFn;
@@ -146,8 +158,8 @@ describe('App', () => {
     expect(screen.getByLabelText('Hide password')).toBeOnTheScreen();
   });
 
-  it('shows the error screen instead of crashing when the API URL is not configured', async () => {
-    delete process.env.EXPO_PUBLIC_API_URL;
+  it('shows the error screen instead of crashing when the app was built without an API URL', async () => {
+    delete mockExtra.apiUrl;
     await render(<App />);
     expect(await screen.findByText('This page ran into a problem')).toBeOnTheScreen();
     expect(screen.getByText('Try again')).toBeOnTheScreen();

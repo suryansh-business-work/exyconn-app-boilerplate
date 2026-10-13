@@ -1,0 +1,120 @@
+name: Mobile builds
+
+# Builds the Android and iOS apps entirely on GitHub runners. No Expo cloud
+# service (EAS) or Expo account is involved: the Expo CLI only generates the
+# native projects locally, and Gradle and Xcode do the builds.
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - 'app/mobile-app/**'
+      - 'packages/common/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/mobile.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MONGOMS_DISABLE_POSTINSTALL: '1'
+  CYPRESS_INSTALL_BINARY: '0'
+  # Full URL of the GraphQL API, embedded in the apps at build time.
+  # Set it as a repository variable (Settings > Secrets and variables > Actions > Variables).
+  APP_API_URL: ${{ vars.APP_API_URL }}
+
+jobs:
+  android:
+    name: Android (APK + AAB)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Warn when the API URL is not configured
+        if: env.APP_API_URL == ''
+        run: echo "::warning::The APP_API_URL repository variable is not set. The app will build but show a configuration error on launch."
+      - name: Generate the native Android project
+        working-directory: app/mobile-app
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Build the release APK and AAB
+        working-directory: app/mobile-app/android
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: app/mobile-app/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-aab
+          path: app/mobile-app/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: iOS (unsigned IPA)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Warn when the API URL is not configured
+        if: env.APP_API_URL == ''
+        run: echo "::warning::The APP_API_URL repository variable is not set. The app will build but show a configuration error on launch."
+      - name: Generate the native iOS project
+        working-directory: app/mobile-app
+        run: pnpm exec expo prebuild --platform ios --no-install
+      - name: Install CocoaPods dependencies
+        working-directory: app/mobile-app/ios
+        run: pod install
+      - name: Build the release archive without signing
+        working-directory: app/mobile-app/ios
+        run: |
+          workspace="$(ls -d *.xcworkspace)"
+          xcodebuild archive \
+            -workspace "$workspace" \
+            -scheme "${workspace%.xcworkspace}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/app.xcarchive" \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+      - name: Package the IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/app.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip --quiet --recurse-paths --symlinks app-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/app-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -37,10 +38,8 @@ function SessionGate() {
 }
 
 function ConfiguredApp() {
-  // Expo inlines EXPO_PUBLIC_* variables at build time; a missing one is caught by the boundary above.
-  const [config] = useState(() =>
-    loadConfig({ EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL }),
-  );
+  // The API URL is embedded at build time; a missing one is caught by the boundary above.
+  const [config] = useState(() => loadConfig(Constants.expoConfig?.extra));
   return (
     <AppProviders config={config}>
       <StatusBar style="dark" />

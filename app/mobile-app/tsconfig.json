@@ -5,5 +5,5 @@
     "noUncheckedIndexedAccess": true,
     "types": ["jest"]
   },
-  "include": ["App.tsx", "index.ts", "src"]
+  "include": ["App.tsx", "app.config.ts", "index.ts", "src"]
 }

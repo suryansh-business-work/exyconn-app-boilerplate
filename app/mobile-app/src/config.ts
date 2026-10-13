@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { HTTP_PROTOCOL_REGEX } from '@common/regex';
 
 const configSchema = z.object({
-  EXPO_PUBLIC_API_URL: z.url({ protocol: HTTP_PROTOCOL_REGEX }),
+  apiUrl: z.url({ protocol: HTTP_PROTOCOL_REGEX }),
 });
 
 export interface AppConfig {
@@ -10,13 +10,16 @@ export interface AppConfig {
   apiUrl: string;
 }
 
-/** Reads build-time configuration, failing loudly if the API URL is missing or malformed. */
-export function loadConfig(source: Record<string, unknown>): AppConfig {
-  const result = configSchema.safeParse(source);
+/**
+ * Reads the configuration embedded in the app at build time (the `extra` block
+ * produced by app.config.ts), failing loudly if the API URL is missing or malformed.
+ */
+export function loadConfig(extra: unknown): AppConfig {
+  const result = configSchema.safeParse(extra);
   if (!result.success) {
     throw new Error(
-      'EXPO_PUBLIC_API_URL must be set to the full http(s) URL of the GraphQL endpoint',
+      'The app was built without a valid API URL. Set APP_API_URL to the full http(s) URL of the GraphQL endpoint and rebuild.',
     );
   }
-  return { apiUrl: result.data.EXPO_PUBLIC_API_URL };
+  return result.data;
 }
