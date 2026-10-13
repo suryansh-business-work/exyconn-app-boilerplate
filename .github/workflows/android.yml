@@ -1,0 +1,59 @@
+name: Android APK
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - 'app/mobile-app/**'
+      - 'packages/common/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/android.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      MONGOMS_DISABLE_POSTINSTALL: '1'
+      CYPRESS_INSTALL_BINARY: '0'
+      # Full URL of the GraphQL API the app talks to. Set it as a repository variable.
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - name: Warn when the API URL is not configured
+        if: env.EXPO_PUBLIC_API_URL == ''
+        run: echo "::warning::EXPO_PUBLIC_API_URL is not set. The APK will build but show a configuration error on launch."
+      - name: Generate the native Android project
+        working-directory: app/mobile-app
+        run: pnpm exec expo prebuild --platform android --no-install
+      - name: Build the release APK
+        working-directory: app/mobile-app/android
+        run: ./gradlew assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/mobile-app/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
