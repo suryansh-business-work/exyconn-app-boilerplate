@@ -1,0 +1,43 @@
+{
+  "name": "@common/shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "cy:run": "cypress run --component",
+    "cy:open": "cypress open --component"
+  },
+  "dependencies": {
+    "@common/api": "workspace:*",
+    "@common/auth": "workspace:*",
+    "@common/design-tokens": "workspace:*",
+    "@common/error-boundary": "workspace:*",
+    "@common/error-handling": "workspace:*",
+    "@common/localization": "workspace:*",
+    "@common/types": "workspace:*",
+    "@common/validators": "workspace:*",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@hookform/resolvers": "^5.9.1",
+    "@mui/icons-material": "^9.5.0",
+    "@mui/material": "^9.5.0",
+    "@tanstack/react-query": "^5.104.2",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-hook-form": "^7.90.0",
+    "react-router": "^7.18.4",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.18",
+    "@types/react-dom": "~19.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}
