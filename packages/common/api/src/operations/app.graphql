@@ -1,0 +1,16 @@
+query Translations($locale: String!) {
+  translations(locale: $locale) {
+    key
+    value
+  }
+}
+
+mutation ReportClientError($input: ClientErrorInput!) {
+  reportClientError(input: $input)
+}
+
+query AdminDashboard {
+  adminDashboard {
+    totalUsers
+  }
+}

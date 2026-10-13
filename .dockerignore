@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.claude
+.vscode
+app
+portals
+**/.env
+**/.env.*
+!**/.env.example

@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The mobile test dependencies must not pull a 700 MB database binary on every install.
+  MONGOMS_DISABLE_POSTINSTALL: '1'
+
+jobs:
+  quality:
+    name: Lint, types, tests, coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # SonarQube needs full history to attribute new code.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+        env:
+          CYPRESS_INSTALL_BINARY: '0'
+      - name: Generated GraphQL types are up to date
+        run: pnpm codegen && git diff --exit-code
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit:coverage
+      - run: pnpm test:mobile:coverage
+      - name: Overall coverage is at least 85%
+        run: pnpm coverage:check
+      - run: pnpm build
+        env:
+          VITE_API_URL: http://localhost:4000/graphql
+      - name: SonarQube scan
+        if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
+        uses: SonarSource/sonarqube-scan-action@v6
+      - name: SonarQube quality gate
+        if: env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != ''
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+
+  browser:
+    name: Browser tests (component + end-to-end)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      mongo:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval \"db.adminCommand('ping').ok\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_ADMIN_EMAIL: e2e-admin@example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm install --frozen-lockfile
+      - name: Component tests
+        run: pnpm test:component
+      - name: Generate throwaway credentials for this run
+        run: |
+          jwt_secret="$(openssl rand -hex 32)"
+          admin_password="E2e-$(openssl rand -hex 12)-Aa1"
+          echo "::add-mask::$jwt_secret"
+          echo "::add-mask::$admin_password"
+          echo "JWT_ACCESS_SECRET=$jwt_secret" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+      - name: Build server and portal
+        run: pnpm --filter server build && pnpm --filter admin-portal build
+        env:
+          VITE_API_URL: http://localhost:4000/graphql
+      - name: Start server and portal
+        run: |
+          node server/dist/index.js > server.log 2>&1 &
+          pnpm --filter admin-portal exec vite preview --port 5173 --strictPort > portal.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://localhost:4000/health > /dev/null \
+              && curl --silent --fail http://localhost:5173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server or portal did not start"; cat server.log portal.log; exit 1
+        env:
+          NODE_ENV: development
+          PORT: '4000'
+          MONGODB_URI: mongodb://localhost:27017/e2e
+          CORS_ORIGINS: http://localhost:5173
+          SEED_ADMIN_NAME: Test Admin
+          SEED_ADMIN_EMAIL: ${{ env.E2E_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+      - name: End-to-end tests
+        run: pnpm test:e2e
+        env:
+          CYPRESS_ADMIN_EMAIL: ${{ env.E2E_ADMIN_EMAIL }}
+          CYPRESS_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
+      - name: Show server log on failure
+        if: failure()
+        run: cat server.log portal.log || true
+
+  docker:
+    name: Docker image and compose stack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write a throwaway .env for this run
+        run: |
+          {
+            echo "MONGO_ROOT_USERNAME=ci"
+            echo "MONGO_ROOT_PASSWORD=$(openssl rand -hex 16)"
+            echo "JWT_ACCESS_SECRET=$(openssl rand -hex 32)"
+            echo "NODE_ENV=staging"
+          } > .env
+      - run: docker compose up --detach --build --wait --wait-timeout 180
+      - name: Server is healthy and connected to MongoDB
+        run: curl --silent --fail --retry 10 --retry-delay 2 --retry-connrefused http://localhost:4000/health
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down --volumes

@@ -1,0 +1,44 @@
+# API server and its MongoDB. Configuration comes from a .env file next to this
+# file (see .env.example). Run with: docker compose up -d --build
+
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?Set MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+    # Not published to the host: only the server container can reach the database.
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-staging}
+      PORT: 4000
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongo:27017/${MONGO_DATABASE:-app}?authSource=admin
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    ports:
+      - '${SERVER_PORT:-4000}:4000'
+
+volumes:
+  mongo-data:

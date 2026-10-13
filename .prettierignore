@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+**/generated/**
+.expo
+app/mobile-app/android
+app/mobile-app/ios
+.claude
+.vscode
