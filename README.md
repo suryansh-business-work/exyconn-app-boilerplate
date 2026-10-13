@@ -50,7 +50,7 @@ Open `http://localhost:5173` and sign in with the seed admin.
 
 ### 3. Mobile app
 
-Set `EXPO_PUBLIC_API_URL` to the GraphQL URL as the phone or emulator reaches it (the Android emulator reaches your machine at `http://10.0.2.2:4000/graphql`), then:
+Set `APP_API_URL` to the GraphQL URL as the phone or emulator reaches it (the Android emulator reaches your machine at `http://10.0.2.2:4000/graphql`), then:
 
 ```bash
 pnpm dev:mobile
@@ -90,17 +90,17 @@ Not built yet: OTP sign-in, Google and Apple sign-in, password reset. These need
 There are two branches. Work is pushed to `staging`; a pull request from `staging` to `main` is the release. Every push runs:
 
 - **CI**: generated-code check, formatting, lint, types, all tests, the 85% coverage gate, builds, Cypress component and end-to-end tests, and a Docker Compose smoke test.
-- **Android APK**: builds a release APK and uploads it as the `app-release-apk` artifact of the workflow run.
+- **Mobile builds**: builds the Android APK and AAB and the iOS IPA on GitHub runners and uploads them as artifacts of the workflow run (`android-apk`, `android-aab`, `ios-unsigned-ipa`). No Expo cloud service or Expo account is used; the Expo CLI only generates the native projects on the runner.
 
 ### Repository settings the workflows read
 
-| Kind     | Name                  | Purpose                                                                         |
-| -------- | --------------------- | ------------------------------------------------------------------------------- |
-| Variable | `EXPO_PUBLIC_API_URL` | GraphQL URL baked into the APK. Without it the app shows a configuration error. |
-| Secret   | `SONAR_TOKEN`         | Enables the SonarQube scan and quality gate.                                    |
-| Secret   | `SONAR_HOST_URL`      | URL of the SonarQube server.                                                    |
+| Kind     | Name             | Purpose                                                                                                |
+| -------- | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| Variable | `APP_API_URL`    | GraphQL URL embedded in the mobile apps at build time. Without it the apps show a configuration error. |
+| Secret   | `SONAR_TOKEN`    | Enables the SonarQube scan and quality gate.                                                           |
+| Secret   | `SONAR_HOST_URL` | URL of the SonarQube server.                                                                           |
 
-The APK is signed with the debug key, which is fine for testing but not for the Play Store. A store release needs an upload keystore, and an iOS build needs an Apple Developer account and signing certificates.
+The Android builds are signed with the debug key, which is fine for testing but not for the Play Store; a store release needs an upload keystore. The iOS IPA is unsigned, so it cannot be installed on an iPhone or uploaded to App Store Connect until an Apple Developer account, a distribution certificate and a provisioning profile are added.
 
 ## Deploy the server
 
