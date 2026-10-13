@@ -1,0 +1,31 @@
+packages:
+  - server
+  - portals/*
+  - app/*
+  - packages/common/*
+
+allowBuilds:
+  '@apollo/protobufjs': false
+  cypress: true
+  esbuild: true
+  mongodb-memory-server: true
+
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.29'
+  - '@expo/fingerprint@0.20.14'
+  - '@expo/inline-modules@0.1.8'
+  - '@expo/local-build-cache-provider@57.0.9'
+  - '@expo/prebuild-config@57.0.18'
+  - babel-preset-expo@57.0.15
+  - expo-modules-autolinking@57.0.15
+  - expo-modules-core@57.0.22
+  - expo-modules-jsi@57.1.2
+  - expo@57.0.28
+  - jest-expo@57.0.6
+
+# React Native's Metro bundler and Gradle expect a flat node_modules tree.
+nodeLinker: hoisted
+
+# Peers are declared explicitly. Auto-installing them pulls the newest optional native
+# modules (for example react-native-worklets), which Expo then links into the app build.
+autoInstallPeers: false
